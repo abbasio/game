@@ -42,11 +42,83 @@ static bool GlobalRunning;
 static win_32_offscreen_buffer GlobalBackBuffer;
 static LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 
-
-static void * PlatformLoadFile(char *FileName)
+static debug_read_file_result DEBUGPlatformReadEntireFile(char *FileName)
 {
-    // Implements Win32 file loading
-    return(0);
+    debug_read_file_result Result = {};
+
+    HANDLE FileHandle = CreateFileA(FileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER FileSize;
+        if(GetFileSizeEx(FileHandle, &FileSize))
+        {
+            uint32_t FileSize32 = SafeTruncateUInt64(FileSize.QuadPart);
+            Result.Contents = VirtualAlloc(0, FileSize.QuadPart, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+            if(Result.Contents)
+            {
+                DWORD BytesRead;
+                if (ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, 0) && 
+                    (FileSize32 == BytesRead))
+                {
+                    // File read successfully
+                    Result.ContentsSize = FileSize32;
+                }
+                else
+                {
+                    DEBUGPlatformFreeFileMemory(Result.Contents);
+                    Result.Contents = 0;
+                }
+            }
+            else
+            {
+                // logging
+            }
+        }
+        else
+        {
+            // logging
+        }
+        CloseHandle(FileHandle);
+    }
+    else
+    {
+        // logging
+    }
+
+    return(Result);
+}
+
+static void DEBUGPlatformFreeFileMemory(void *Memory)
+{
+    if(Memory)
+    {
+        VirtualFree(Memory, 0, MEM_RELEASE);
+    }
+}
+static bool DEBUGPlatformWriteEntireFile(char *FileName, uint32_t MemorySize, void *Memory)
+{
+    bool Result = false;
+
+    HANDLE FileHandle = CreateFileA(FileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+    if (FileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD BytesWritten;
+        if (WriteFile(FileHandle, Memory, MemorySize, &BytesWritten, 0)) 
+        {
+            Result = (BytesWritten == MemorySize);
+        }
+        else
+        {
+            // logging
+        }
+        CloseHandle(FileHandle);
+    }
+    else
+    {
+        // logging
+    }
+
+    return(Result);
 }
 
 static void Win32LoadXInput(void)
@@ -421,7 +493,8 @@ int CALLBACK WinMain(
             game_memory GameMemory = {};
             GameMemory.PermanentStorageSize = Megabytes(64);
             GameMemory.TransientStorageSize = Gigabytes((uint64_t)4);
-            
+           
+            // TODO: Handle different memory footprints
             uint64_t TotalSize = GameMemory.PermanentStorageSize + GameMemory.TransientStorageSize;
 
             GameMemory.PermanentStorage = VirtualAlloc(BaseAddress, TotalSize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);

@@ -20,8 +20,25 @@
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
-//--------Services that the platform layer provides to the game.
+inline uint32_t SafeTruncateUInt64(uint64_t Value)
+{
+    // TODO: Define something for maximum values (UInt32Max)
+    Assert(Value <= 0xFFFFFFFF); // Less than 32 bits
+    return((uint32_t)Value);
+}
 
+
+//--------Services that the platform layer provides to the game.
+#if GAME_INTERNAL
+struct debug_read_file_result
+{
+    uint32_t ContentsSize;
+    void *Contents;
+};
+static debug_read_file_result DEBUGPlatformReadEntireFile(char *FileName);
+void DEBUGPlatformFreeFileMemory(void *Memory);
+bool DEBUGPlatformWriteEntireFile(char *FileName, uint32_t MemorySize, void *Memory);
+#endif
 //--------Services that the game provides to the platform layer.
 //Input: Timing, Controller/Keyboard input, Bitmap buffer to use, sound buffer to usestruct win_32_offscreen_buffer 
 struct game_sound_output_buffer
