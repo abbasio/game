@@ -318,40 +318,9 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM wPara
         case WM_KEYDOWN:
         case WM_KEYUP:
         {
-            uint32_t VKCode = uint32_t(wParam);
-            bool WasDown = ((lParam & (1 << 30)) != 0); // lParam is a bit field, 30th bit lets us know if the key was down or up before this message was triggered
-            bool IsDown = ((lParam & (1 << 31)) == 0); // 31st bit is transition state (0 for key down message, 1 for key up message)
-            if(WasDown != IsDown) // avoid key repeat message
-            {
-                if(VKCode == VK_UP)
-                {   
-                } 
-                else if(VKCode == VK_DOWN)
-                {   
-                } 
-                else if(VKCode == VK_LEFT)
-                {   
-                } 
-                else if(VKCode == VK_RIGHT)
-                {   
-                } 
-                else if(VKCode == VK_ESCAPE)
-                { 
-                } 
-                else if(VKCode == VK_SPACE)
-                {   
-                } 
-                
-                bool AltKeyWasDown = ((lParam & (1 << 29)) != 0);
-                if((VKCode == VK_F4) && AltKeyWasDown)
-                {
-                    GlobalRunning = false;
-                }
-
-                break;
-            }
-            
-        } 
+            Assert(!"Keyboard input came through non-dispatch message"); 
+            break;
+        }  
         default:
         {
             //OutputDebugStringA("default\n");
@@ -417,12 +386,18 @@ static void Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLo
     }
 }
 
+static void Win32ProcessKeyboardMessage(game_button_state *NewState, bool IsDown)
+{
+    NewState->EndedDown = IsDown;
+    ++NewState->HalfTransitionCount;
+}
+
 static void Win32ProcessXInputDigitalButton(DWORD XInputButtonState, 
                                             game_button_state *OldState, DWORD ButtonBit, 
                                             game_button_state *NewState)
 {
     NewState->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
-    NewState->HalfTransitionCount = (OldState->EndedDown != NewState->EndedDown) ? 1 : 0;
+    ++NewState->HalfTransitionCount = (OldState->EndedDown != NewState->EndedDown) ? 1 : 0;
 }
 
 int CALLBACK WinMain(
@@ -513,16 +488,71 @@ int CALLBACK WinMain(
                 while(GlobalRunning)
                 { 
                     MSG Message;
+
+                    game_controller_input *KeyboardController = &NewInput->Controllers[0];
+                    // TODO: zeroing macro
+                    game_controller_input ZeroController = {};
+                    *KeyboardController = ZeroController;
                     
                     while(PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
                     {
-                        if (Message.message == WM_QUIT)
+                        switch(Message.message)
                         {
-                            GlobalRunning = false;
-                        }   
+                            case WM_QUIT:
+                            {
+                                GlobalRunning = false;
+                            } break;
+                            
+                            case WM_SYSKEYDOWN:
+                            case WM_SYSKEYUP:
+                            case WM_KEYDOWN:
+                            case WM_KEYUP:
+                            {
+
+                                uint32_t VKCode = uint32_t(Message.wParam);
+                                bool WasDown = ((Message.lParam & (1 << 30)) != 0); // lParam is a bit field, 30th bit lets us know if the key was down or up before this message was triggered
+                                bool IsDown = ((Message.lParam & (1 << 31)) == 0); // 31st bit is transition state (0 for key down message, 1 for key up message)
+                                if(WasDown != IsDown) // avoid key repeat message
+                                {
+                                    if(VKCode == VK_UP)
+                                    {
+                                        Win32ProcessKeyboardMessage(&KeyboardController->Up, IsDown);
+                                    } 
+                                    else if(VKCode == VK_DOWN)
+                                    {
+                                        Win32ProcessKeyboardMessage(&KeyboardController->Down, IsDown);
+                                    }
+                                    else if(VKCode == VK_LEFT)
+                                    {
+                                        Win32ProcessKeyboardMessage(&KeyboardController->Left, IsDown);
+                                    }
+                                    else if(VKCode == VK_RIGHT)
+                                    {
+                                        Win32ProcessKeyboardMessage(&KeyboardController->Right, IsDown);
+                                    } 
+                                    else if(VKCode == VK_ESCAPE)
+                                    {
+                                        GlobalRunning = false; 
+                                    } 
+                                    else if(VKCode == VK_SPACE)
+                                    {   
+                                    }
+
+                                    bool AltKeyWasDown = ((Message.lParam & (1 << 29)) != 0);
+                                    if((VKCode == VK_F4) && AltKeyWasDown)
+                                    {
+                                        GlobalRunning = false;
+                                    }
+                                }
+                            } break;
+
+                            default:
+                            {
+                                TranslateMessage(&Message);
+                                DispatchMessageA(&Message);
+                            } break;
+                        }
                         
-                        TranslateMessage(&Message);
-                        DispatchMessageA(&Message);
                     }
                     
                     
@@ -579,7 +609,6 @@ int CALLBACK WinMain(
                         
                             //int16_t LeftStickX = (float)Pad->sThumbLX / ;
                             //int16_t LeftStickY = (float)Pad->sThumbLY;
-                        
                             
                             Win32ProcessXInputDigitalButton(Pad->wButtons, &OldController->Down, XINPUT_GAMEPAD_A, &NewController->Down);
                             Win32ProcessXInputDigitalButton(Pad->wButtons, &OldController->Right, XINPUT_GAMEPAD_B, &NewController->Right);
