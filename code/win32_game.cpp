@@ -202,7 +202,7 @@ static void Win32InitDSound(HWND Window, int32_t SamplesPerSecond, int32_t Buffe
 
             HRESULT Error = DirectSound->CreateSoundBuffer(&BufferDescription, &GlobalSecondaryBuffer, 0);
             
-            if(SUCCEEDED(ERROR))
+            if(SUCCEEDED(Error))
             {
                 OutputDebugStringA("Secondary buffer created successfully.\n"); 
             }
@@ -318,7 +318,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message, WPARAM wPara
         case WM_KEYDOWN:
         case WM_KEYUP:
         {
-            uint32_t VKCode = wParam;
+            uint32_t VKCode = uint32_t(wParam);
             bool WasDown = ((lParam & (1 << 30)) != 0); // lParam is a bit field, 30th bit lets us know if the key was down or up before this message was triggered
             bool IsDown = ((lParam & (1 << 31)) == 0); // 31st bit is transition state (0 for key down message, 1 for key up message)
             if(WasDown != IsDown) // avoid key repeat message
@@ -492,7 +492,7 @@ int CALLBACK WinMain(
 #endif
             game_memory GameMemory = {};
             GameMemory.PermanentStorageSize = Megabytes(64);
-            GameMemory.TransientStorageSize = Gigabytes((uint64_t)4);
+            GameMemory.TransientStorageSize = Gigabytes((uint64_t)1);
            
             // TODO: Handle different memory footprints
             uint64_t TotalSize = GameMemory.PermanentStorageSize + GameMemory.TransientStorageSize;
@@ -605,9 +605,9 @@ int CALLBACK WinMain(
                     // DirectSound output test
                     // The following uses a ring buffer
                     // Write cursor must stay ahead of the play cursor
-                    DWORD ByteToLock;
+                    DWORD ByteToLock = 0;
                     DWORD TargetCursor;
-                    DWORD BytesToWrite;
+                    DWORD BytesToWrite = 0;
                     DWORD PlayCursor;
                     DWORD WriteCursor;
                     bool SoundIsValid = false;
@@ -658,7 +658,7 @@ int CALLBACK WinMain(
                     uint64_t CyclesElapsed = EndCycleCount - LastCycleCount;
                     int64_t CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
                     int64_t MSPerFrame = ((1000*CounterElapsed) / PerfCountFrequency);
-                    int32_t FPS = PerfCountFrequency / CounterElapsed;
+                    int64_t FPS = PerfCountFrequency / CounterElapsed;
                     int32_t MegaCyclesPerFrame = (int32_t)(CyclesElapsed / (1000 * 1000));
 
                     /* char Buffer[256]; 

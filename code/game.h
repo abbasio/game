@@ -36,8 +36,8 @@ struct debug_read_file_result
     void *Contents;
 };
 static debug_read_file_result DEBUGPlatformReadEntireFile(char *FileName);
-void DEBUGPlatformFreeFileMemory(void *Memory);
-bool DEBUGPlatformWriteEntireFile(char *FileName, uint32_t MemorySize, void *Memory);
+static void DEBUGPlatformFreeFileMemory(void *Memory);
+static bool DEBUGPlatformWriteEntireFile(char *FileName, uint32_t MemorySize, void *Memory);
 #endif
 //--------Services that the game provides to the platform layer.
 //Input: Timing, Controller/Keyboard input, Bitmap buffer to use, sound buffer to usestruct win_32_offscreen_buffer 

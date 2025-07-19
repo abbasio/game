@@ -31,8 +31,8 @@ static void RenderWeirdGradient(game_offscreen_buffer *Buffer, int BlueOffset, i
           Little Endian Architecture
           0x xxRRGGBB
          */
-            uint8_t Blue = (X + BlueOffset);
-            uint8_t Green = (Y + GreenOffset);
+            uint8_t Blue = (uint8_t)(X + BlueOffset);
+            uint8_t Green = (uint8_t)(Y + GreenOffset);
 
             // write a value to the location of the pixel pointer,
             // then increment
@@ -72,7 +72,7 @@ static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_off
     if(Input0->IsAnalog)
     {
         //  Use analog movement tuning
-        GameState->BlueOffset += (int)4.0f*(Input0->EndX);
+        GameState->BlueOffset += (int)(4.0f*(Input0->EndX));
         GameState->ToneHz = 256 + (int)(128.0f*(Input0->EndY));
     }
     else
