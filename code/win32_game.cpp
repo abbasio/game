@@ -384,6 +384,7 @@ static void Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLo
 
 static void Win32ProcessKeyboardMessage(game_button_state *NewState, bool IsDown)
 {
+    Assert(NewState->EndedDown != IsDown); // We should only get the state if nothing changed
     NewState->EndedDown = IsDown;
     ++NewState->HalfTransitionCount;
 }
@@ -549,22 +550,29 @@ int CALLBACK WinMain(
                 uint64_t LastCycleCount = __rdtsc();
                 while(GlobalRunning)
                 { 
-
-                    game_controller_input *KeyboardController = &NewInput->Controllers[0];
+                    game_controller_input *OldKeyboardController = &OldInput->Controllers[0];
+                    game_controller_input *NewKeyboardController = &NewInput->Controllers[0];
                     // TODO: zeroing macro
                     game_controller_input ZeroController = {};
-                    *KeyboardController = ZeroController;
-                    Win32ProcessPendingMessages(KeyboardController);
+                    *NewKeyboardController = ZeroController;
+                    for(int ButtonIndex = 0; ButtonIndex < ArrayCount(NewKeyboardController->Buttons); ++ButtonIndex)
+                    {
+                        NewKeyboardController->Buttons[ButtonIndex].EndedDown = OldKeyboardController->Buttons[ButtonIndex].EndedDown;
+                    }
+
+                    Win32ProcessPendingMessages(NewKeyboardController);
                     
-                    DWORD MaxControllerCount = XUSER_MAX_COUNT;
+                    DWORD MaxControllerCount = 1 + XUSER_MAX_COUNT;
                     if(MaxControllerCount > ArrayCount(NewInput->Controllers))
                     {
                         MaxControllerCount = ArrayCount(NewInput->Controllers);
                     }
                     for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
                     {
-                        game_controller_input *OldController = &OldInput->Controllers[ControllerIndex];
-                        game_controller_input *NewController = &NewInput->Controllers[ControllerIndex];
+                        
+                        DWORD OurControllerIndex = ControllerIndex + 1; // 0 is the keyboard controller
+                        game_controller_input *OldController = &OldInput->Controllers[OurControllerIndex];
+                        game_controller_input *NewController = &NewInput->Controllers[OurControllerIndex];
 
                         XINPUT_STATE ControllerState;
                         if(XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
