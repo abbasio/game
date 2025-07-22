@@ -68,22 +68,25 @@ static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_off
 
     }
 
-    game_controller_input *Input0 = &Input->Controllers[0];
-    if(Input0->IsAnalog)
+    for(int ControllerIndex = 0; ControllerIndex < ArrayCount(Input->Controllers); ++ControllerIndex)
     {
-        //  Use analog movement tuning
-        GameState->BlueOffset += (int)(4.0f*(Input0->EndX));
-        GameState->ToneHz = 256 + (int)(128.0f*(Input0->EndY));
-    }
-    else
-    {
-        // Use digital movement tuning
+        game_controller_input *Controller = &Input->Controllers[ControllerIndex];
+        if(Controller->IsAnalog)
+        {
+            //  Use analog movement tuning
+            GameState->BlueOffset += (int)(4.0f*(Controller->EndX));
+            GameState->ToneHz = 256 + (int)(128.0f*(Controller->EndY));
+        }
+        else 
+        {
+            // Use digital movement tuning
+        }
+        if(Controller->Down.EndedDown)
+        {
+            GameState->GreenOffset += 1;
+        }
     }
 
-    if(Input0->Down.EndedDown)
-    {
-        GameState->GreenOffset += 1;
-    }
 
 
     GameOutputSound(SoundBuffer, GameState->ToneHz);

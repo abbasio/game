@@ -397,6 +397,20 @@ static void Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
     ++NewState->HalfTransitionCount = (OldState->EndedDown != NewState->EndedDown) ? 1 : 0;
 }
 
+static float Win32ProcessXInputStickValue(SHORT Value, SHORT DeadZoneThreshold)
+{
+    float Result = 0;
+    if(Value < -DeadZoneThreshold)
+    {
+        Result = (float)Value / 32768.0f;
+    }
+    else if(Value > DeadZoneThreshold)
+    {
+        Result = (float)Value / 32767.0f;
+    }
+    return Result;
+}
+
 static void Win32ProcessPendingMessages(game_controller_input *KeyboardController)
 {
 
@@ -591,27 +605,11 @@ int CALLBACK WinMain(
                             NewController->StartY = OldController->EndY;
                             
                             // Normalize stick value
-                            float X;
-                            if(Pad->sThumbLX < 0)
-                            {
-                                X = (float)Pad->sThumbLX / 32768.0f;
-                            }
-                            else
-                            {
-                                X = (float)Pad->sThumbLX / 32767.0f;
-                            }
-                            
+                            float X = Win32ProcessXInputStickValue(Pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+
                             NewController->MinX = NewController->MaxX = NewController->EndX = X;
 
-                            float Y;
-                            if(Pad->sThumbLY < 0)
-                            {
-                                Y = (float)Pad->sThumbLY / 32768.0f;
-                            }
-                            else
-                            {
-                                Y = (float)Pad->sThumbLY / 32767.0f;
-                            }
+                            float Y = Win32ProcessXInputStickValue(Pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 
                             NewController->MinY = NewController->MaxY = NewController->EndY = Y;
                         
