@@ -1,6 +1,6 @@
 #if !defined(WIN32_GAME_H)
 
-struct win_32_offscreen_buffer 
+struct win32_offscreen_buffer 
 {
     BITMAPINFO Info;
     void *Memory;
@@ -23,7 +23,7 @@ struct win32_sound_output
     int SamplesPerSecond;
     uint32_t RunningSampleIndex;
     int BytesPerSample;
-    int SecondaryBufferSize;
+    DWORD SecondaryBufferSize;
     float tSine;
     int LatencySampleCount;
 };

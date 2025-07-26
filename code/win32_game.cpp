@@ -39,7 +39,7 @@ static x_input_set_state *XInputSetState_ = XInputSetStateStub;
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 static bool GlobalRunning;
-static win_32_offscreen_buffer GlobalBackBuffer;
+static win32_offscreen_buffer GlobalBackBuffer;
 static LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 static int64_t GlobalPerfCountFrequency;
 
@@ -237,7 +237,7 @@ win32_window_dimension Win32GetWindowDimension(HWND Window)
 
 
 // DIB = Device Independent Bitmap
-static void Win32ResizeDIBSection(win_32_offscreen_buffer *Buffer, int Width, int Height)
+static void Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
 {
     if(Buffer->Memory)
     {
@@ -262,7 +262,7 @@ static void Win32ResizeDIBSection(win_32_offscreen_buffer *Buffer, int Width, in
      Buffer->Pitch = Width*Buffer->BytesPerPixel;
 }
 
-static void Win32DisplayBufferInWindow(win_32_offscreen_buffer *Buffer, 
+static void Win32DisplayBufferInWindow(win32_offscreen_buffer *Buffer, 
                                 HDC DeviceContext, int WindowWidth, int WindowHeight)
 {
     // Rectangle to Rectangle copy
@@ -507,6 +507,40 @@ inline float Win32GetSecondsElapsed(LARGE_INTEGER Start, LARGE_INTEGER End)
     return Result;
 }
 
+static void Win32DebugDrawVertical(win32_offscreen_buffer *Buffer, int X, int Top, int Bottom, uint32_t Color)
+{
+        uint8_t *Pixel = (uint8_t *)((uint8_t *)Buffer->Memory + 
+                                        X*Buffer->BytesPerPixel + 
+                                        Top*Buffer->Pitch);
+        for (int Y = Top; Y < Bottom; ++Y)
+        {
+            *(uint32_t *)Pixel = Color;
+            Pixel += Buffer->Pitch;
+        }
+}
+
+static void Win32DebugSyncDisplay(win32_offscreen_buffer *Buffer, int LastPlayCursorCount, DWORD *LastPlayCursor, 
+                                win32_sound_output *SoundOutput, float TargetSecondsPerFrame)
+{
+    int PadX = 32;
+    int PadY = 32;
+
+    int Top = PadY;
+    int Bottom = Buffer->Height - PadY;
+    
+    // Map sample buffer bytes to pixels for display
+    // this looks fancy but all we're doing is making a visual representation of the sound buffer and play cursors
+    float C = ((float)Buffer->Width - 2*PadX) / (float)SoundOutput->SecondaryBufferSize;
+    for(int PlayCursorIndex = 0; PlayCursorIndex < LastPlayCursorCount; ++PlayCursorIndex)
+    {
+        DWORD ThisPlayCursor = LastPlayCursor[PlayCursorIndex];
+        Assert(ThisPlayCursor < SoundOutput->SecondaryBufferSize);
+
+        int X = PadX + (int)(C * (float)ThisPlayCursor);
+        Win32DebugDrawVertical(Buffer, X, Top, Bottom, 0xFFFFFFFF);
+    }
+}
+
 int CALLBACK WinMain(
         HINSTANCE hInstance, 
         HINSTANCE hPrevInstance, 
@@ -535,8 +569,8 @@ int CALLBACK WinMain(
     WindowClass.lpszClassName = "GameWindowClass";
 
     // TODO: Reliably query this on windows
-    int MonitorRefreshHz = 120;
-    int GameUpdateHz = MonitorRefreshHz / 2;
+#define MonitorRefreshHz 120
+#define GameUpdateHz (MonitorRefreshHz / 2)
     float TargetSecondsPerFrame = 1.0f / (float)GameUpdateHz;
 
     if(RegisterClassA(&WindowClass)) 
@@ -599,6 +633,9 @@ int CALLBACK WinMain(
                 game_input *OldInput = &Input[1];
 
                 LARGE_INTEGER LastCounter = Win32GetWallClock();
+
+                int DebugLastPlayCursorIndex = 0;
+                DWORD DebugLastPlayCursor[GameUpdateHz / 2] = {0};
                 
                 uint64_t LastCycleCount = __rdtsc();
                 while(GlobalRunning)
@@ -753,13 +790,17 @@ int CALLBACK WinMain(
                     float SecondsElapsedForFrame = WorkSecondsElapsed;
                     if(SecondsElapsedForFrame < TargetSecondsPerFrame)
                     {
-                        while(SecondsElapsedForFrame < TargetSecondsPerFrame)
+                        if(SleepIsGranular)
                         {
-                            if(SleepIsGranular)
+                            DWORD MsToSleep = (DWORD)(1000.0f * (TargetSecondsPerFrame - SecondsElapsedForFrame));
+                            if(MsToSleep > 0)
                             {
-                                DWORD MsToSleep = (DWORD)(1000.0f * (TargetSecondsPerFrame - SecondsElapsedForFrame));
                                 Sleep(MsToSleep);
                             }
+                        }
+
+                        while(SecondsElapsedForFrame < TargetSecondsPerFrame)
+                        {
                             SecondsElapsedForFrame = Win32GetSecondsElapsed(LastCounter, Win32GetWallClock());
                         }
                     } 
@@ -769,16 +810,32 @@ int CALLBACK WinMain(
                         // logging
                     }
                     
+                    LARGE_INTEGER EndCounter = Win32GetWallClock();
+                    float MSPerFrame = 1000.0f * Win32GetSecondsElapsed(LastCounter, EndCounter);
+                    LastCounter = EndCounter;   
+                    
                     win32_window_dimension Dimension = Win32GetWindowDimension(Window);
+#if GAME_INTERNAL
+                    Win32DebugSyncDisplay(&GlobalBackBuffer, ArrayCount(DebugLastPlayCursor), DebugLastPlayCursor, &SoundOutput, TargetSecondsPerFrame);
+#endif
                     Win32DisplayBufferInWindow(&GlobalBackBuffer, DeviceContext, Dimension.Width, Dimension.Height);
+#if GAME_INTERNAL
+                   {
+                    DWORD DebugPlayCursor;
+                    DWORD DebugWriteCursor;
+                    GlobalSecondaryBuffer->GetCurrentPosition(&DebugPlayCursor, &DebugWriteCursor);
+
+                    DebugLastPlayCursor[DebugLastPlayCursorIndex++] = DebugPlayCursor;
+                    if(DebugLastPlayCursorIndex > ArrayCount(DebugLastPlayCursor))
+                    {
+                        DebugLastPlayCursorIndex = 0;
+                    }
+                   }
+#endif
                     
                     game_input *Temp = NewInput;
                     NewInput = OldInput;
                     OldInput = Temp;
-                    
-                    LARGE_INTEGER EndCounter = Win32GetWallClock();
-                    float MSPerFrame = 1000.0f * Win32GetSecondsElapsed(LastCounter, EndCounter);
-                    LastCounter = EndCounter;   
                     
                     uint64_t EndCycleCount = __rdtsc();
                     uint64_t CyclesElapsed = EndCycleCount - LastCycleCount;
