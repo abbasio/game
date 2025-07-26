@@ -197,7 +197,7 @@ static void Win32InitDSound(HWND Window, int32_t SamplesPerSecond, int32_t Buffe
 
             DSBUFFERDESC BufferDescription = {};
             BufferDescription.dwSize = sizeof(BufferDescription);
-            BufferDescription.dwFlags = 0;
+            BufferDescription.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
             BufferDescription.dwBufferBytes = BufferSize;
             BufferDescription.lpwfxFormat = &WaveFormat;
 
@@ -519,7 +519,17 @@ static void Win32DebugDrawVertical(win32_offscreen_buffer *Buffer, int X, int To
         }
 }
 
-static void Win32DebugSyncDisplay(win32_offscreen_buffer *Buffer, int LastPlayCursorCount, DWORD *LastPlayCursor, 
+inline void Win32DrawSoundBufferMarker(win32_offscreen_buffer *Buffer, 
+                                       win32_sound_output *SoundOutput,
+                                       float C, int PadX, int Top, int Bottom, DWORD Value, uint32_t Color)
+{
+    Assert(Value < SoundOutput->SecondaryBufferSize);
+
+    int X = PadX + (int)(C * (float)Value);
+    Win32DebugDrawVertical(Buffer, X, Top, Bottom, Color);
+}
+
+static void Win32DebugSyncDisplay(win32_offscreen_buffer *Buffer, int MarkerCount, win32_debug_time_marker *Markers, 
                                 win32_sound_output *SoundOutput, float TargetSecondsPerFrame)
 {
     int PadX = 32;
@@ -530,14 +540,12 @@ static void Win32DebugSyncDisplay(win32_offscreen_buffer *Buffer, int LastPlayCu
     
     // Map sample buffer bytes to pixels for display
     // this looks fancy but all we're doing is making a visual representation of the sound buffer and play cursors
-    float C = ((float)Buffer->Width - 2*PadX) / (float)SoundOutput->SecondaryBufferSize;
-    for(int PlayCursorIndex = 0; PlayCursorIndex < LastPlayCursorCount; ++PlayCursorIndex)
+    float C = ((float)Buffer->Width - 2*PadX) / (float)(SoundOutput->SecondaryBufferSize);
+    for(int MarkerIndex = 0; MarkerIndex < MarkerCount; ++MarkerIndex)
     {
-        DWORD ThisPlayCursor = LastPlayCursor[PlayCursorIndex];
-        Assert(ThisPlayCursor < SoundOutput->SecondaryBufferSize);
-
-        int X = PadX + (int)(C * (float)ThisPlayCursor);
-        Win32DebugDrawVertical(Buffer, X, Top, Bottom, 0xFFFFFFFF);
+        win32_debug_time_marker *ThisMarker = &Markers[MarkerIndex];
+        Win32DrawSoundBufferMarker(Buffer, SoundOutput, C, PadX, Top, Bottom, ThisMarker->PlayCursor, 0xFFFFFFFF);
+        Win32DrawSoundBufferMarker(Buffer, SoundOutput, C, PadX, Top, Bottom, ThisMarker->WriteCursor, 0xFFFF0000);
     }
 }
 
@@ -634,8 +642,8 @@ int CALLBACK WinMain(
 
                 LARGE_INTEGER LastCounter = Win32GetWallClock();
 
-                int DebugLastPlayCursorIndex = 0;
-                DWORD DebugLastPlayCursor[GameUpdateHz / 2] = {0};
+                int DebugTimeMarkerIndex = 0;
+                win32_debug_time_marker DebugTimeMarkers[GameUpdateHz / 2] = {0};
                 
                 uint64_t LastCycleCount = __rdtsc();
                 while(GlobalRunning)
@@ -816,21 +824,20 @@ int CALLBACK WinMain(
                     
                     win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 #if GAME_INTERNAL
-                    Win32DebugSyncDisplay(&GlobalBackBuffer, ArrayCount(DebugLastPlayCursor), DebugLastPlayCursor, &SoundOutput, TargetSecondsPerFrame);
+                    Win32DebugSyncDisplay(&GlobalBackBuffer, ArrayCount(DebugTimeMarkers), DebugTimeMarkers, &SoundOutput, TargetSecondsPerFrame);
 #endif
                     Win32DisplayBufferInWindow(&GlobalBackBuffer, DeviceContext, Dimension.Width, Dimension.Height);
 #if GAME_INTERNAL
-                   {
-                    DWORD DebugPlayCursor;
-                    DWORD DebugWriteCursor;
-                    GlobalSecondaryBuffer->GetCurrentPosition(&DebugPlayCursor, &DebugWriteCursor);
-
-                    DebugLastPlayCursor[DebugLastPlayCursorIndex++] = DebugPlayCursor;
-                    if(DebugLastPlayCursorIndex > ArrayCount(DebugLastPlayCursor))
                     {
-                        DebugLastPlayCursorIndex = 0;
+                        win32_debug_time_marker *Marker = &DebugTimeMarkers[DebugTimeMarkerIndex++];
+                        if(DebugTimeMarkerIndex > ArrayCount(DebugTimeMarkers))
+                        {
+                            DebugTimeMarkerIndex = 0;
+                        }
+                    
+                        GlobalSecondaryBuffer->GetCurrentPosition(&Marker->PlayCursor, &Marker->WriteCursor);
+                   
                     }
-                   }
 #endif
                     
                     game_input *Temp = NewInput;
