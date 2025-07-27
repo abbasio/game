@@ -42,7 +42,7 @@ static void RenderWeirdGradient(game_offscreen_buffer *Buffer, int BlueOffset, i
         Row += Buffer->Pitch;
     }
 }
-static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer, game_sound_output_buffer *SoundBuffer)
+static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer)
 {
     game_state *GameState = (game_state *)Memory->PermanentStorage;
 
@@ -95,8 +95,11 @@ static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_off
         }
     }
 
-
-
-    GameOutputSound(SoundBuffer, GameState->ToneHz);
     RenderWeirdGradient(Buffer, GameState->BlueOffset, GameState->GreenOffset);
+}
+
+static void GameGetSoundSamples(game_memory *Memory, game_sound_output_buffer *SoundBuffer)
+{
+    game_state *GameState = (game_state *)Memory->PermanentStorage;
+    GameOutputSound(SoundBuffer, GameState->ToneHz);
 }

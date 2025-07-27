@@ -124,8 +124,10 @@ struct game_memory
 
 
 static void GameOutputSound(game_sound_output_buffer *SoundBuffer, int SampleCountToOutput);
-static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer, game_sound_output_buffer *SoundBuffer);
-
+static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer);
+// NOTE: This has to be performant or audio latency will be high
+// Reduce pressure on this function by measuring
+static void GameGetSoundSamples(game_memory *Memory, game_sound_output_buffer *SoundBuffer);
 
 #define GAME_H
 #endif
