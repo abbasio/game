@@ -133,7 +133,8 @@ static win32_game_code Win32LoadGameCode(void)
 {
     win32_game_code Result = {};
     
-    Result.GameCodeDLL = LoadLibrary("game.exe");
+    CopyFile("game.dll", "game_temp.dll", FALSE);
+    Result.GameCodeDLL = LoadLibrary("game_temp.dll");
     if(Result.GameCodeDLL)
     {
         Result.UpdateAndRender = (game_update_and_render *)GetProcAddress(Result.GameCodeDLL, "GameUpdateAndRender");
@@ -148,6 +149,19 @@ static win32_game_code Win32LoadGameCode(void)
     } 
     
     return Result;
+}
+
+static void Win32UnloadGameCode(win32_game_code *GameCode)
+{
+    if(GameCode->GameCodeDLL)
+    {
+        FreeLibrary(GameCode->GameCodeDLL);
+        GameCode->GameCodeDLL = 0;
+    }
+
+    GameCode->IsValid = false;
+    GameCode->UpdateAndRender = GameUpdateAndRenderStub;
+    GameCode->GetSoundSamples = GameGetSoundSamplesStub;
 }
 
 static void Win32LoadXInput(void)
@@ -636,8 +650,6 @@ int CALLBACK WinMain(
         LPSTR lpCmdLine, 
         int nCmdShow) 
 {
-    win32_game_code Game = Win32LoadGameCode();
-    
     LARGE_INTEGER PerfCountFrequencyResult;
     QueryPerformanceFrequency(&PerfCountFrequencyResult);
     GlobalPerfCountFrequency = PerfCountFrequencyResult.QuadPart;
@@ -752,9 +764,19 @@ int CALLBACK WinMain(
                 DWORD AudioLatencyBytes = 0;
                 float AudioLatencySeconds = 0;
                 
+                win32_game_code Game = Win32LoadGameCode();
+                uint32_t LoadCounter = 0;
+                
                 uint64_t LastCycleCount = __rdtsc();
                 while(GlobalRunning)
                 { 
+                    if(LoadCounter++ > 240)
+                    {
+                        Win32UnloadGameCode(&Game);
+                        Game = Win32LoadGameCode();
+                        LoadCounter = 0;
+                    }
+                    
                     game_controller_input *OldKeyboardController = GetController(OldInput, 0);
                     game_controller_input *NewKeyboardController = GetController(NewInput, 0);
                     // TODO: zeroing macro
@@ -1046,7 +1068,8 @@ int CALLBACK WinMain(
                     }
 #endif                    
                 }                
-                }
+                
+            }
             }
             else
             {

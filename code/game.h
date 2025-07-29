@@ -122,6 +122,8 @@ struct game_state
     int ToneHz;
     int GreenOffset;
     int BlueOffset;
+
+    float tSine;
 };
 
 struct game_memory

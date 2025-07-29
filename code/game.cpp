@@ -1,20 +1,23 @@
 #include "game.h"
 
-void GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
+void GameOutputSound(game_state *GameState, game_sound_output_buffer *SoundBuffer)
 {
-    static float tSine;
     int16_t ToneVolume = 3000;
-    int WavePeriod = SoundBuffer -> SamplesPerSecond/ToneHz;
-    
+    int WavePeriod = SoundBuffer -> SamplesPerSecond/GameState->ToneHz;
+
     int16_t *SampleOut = SoundBuffer->Samples;
     for(int SampleIndex = 0; SampleIndex < SoundBuffer->SampleCount; ++SampleIndex)
     {
-        float SineValue = sinf(tSine);
+        float SineValue = sinf(GameState->tSine);
         int16_t SampleValue = (int16_t)(SineValue * ToneVolume);
         *SampleOut++ = SampleValue;
         *SampleOut++ = SampleValue;
 
-        tSine += 2.0f*Pi32*1.0f / (float)WavePeriod;
+        GameState->tSine += 2.0f*Pi32*1.0f / (float)WavePeriod;
+        if(GameState->tSine > (2.0f*Pi32))
+        {
+            GameState->tSine -= (2.0f*Pi32);
+        }
     }
 }
 
@@ -61,6 +64,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         }
         
         GameState->ToneHz = 256;
+        GameState->tSine = 0.0f;
         // might move to platform layer
         Memory->IsInitialized = true;
     }
@@ -102,7 +106,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 extern "C" GAME_GET_SOUND_SAMPLES(GameGetSoundSamples)
 {
     game_state *GameState = (game_state *)Memory->PermanentStorage;
-    GameOutputSound(SoundBuffer, GameState->ToneHz);
+    GameOutputSound(GameState, SoundBuffer);
 }
 
 #if GAME_WIN32
