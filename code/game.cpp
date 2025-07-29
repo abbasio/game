@@ -1,6 +1,6 @@
 #include "game.h"
 
-static void GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
+void GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
 {
     static float tSine;
     int16_t ToneVolume = 3000;
@@ -42,7 +42,8 @@ static void RenderWeirdGradient(game_offscreen_buffer *Buffer, int BlueOffset, i
         Row += Buffer->Pitch;
     }
 }
-static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer)
+
+extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     game_state *GameState = (game_state *)Memory->PermanentStorage;
 
@@ -52,12 +53,12 @@ static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_off
     {
         char *FileName = __FILE__;
         
-        debug_read_file_result File = DEBUGPlatformReadEntireFile(FileName);
+        debug_read_file_result File = Memory->DEBUGPlatformReadEntireFile(FileName);
         if(File.Contents)
         {
-            DEBUGPlatformWriteEntireFile("test.out", File.ContentsSize, File.Contents);
-            DEBUGPlatformFreeFileMemory(File.Contents);
-        }   
+            Memory->DEBUGPlatformWriteEntireFile("test.out", File.ContentsSize, File.Contents);
+            Memory->DEBUGPlatformFreeFileMemory(File.Contents);
+        }
         
         GameState->ToneHz = 256;
         // might move to platform layer
@@ -98,8 +99,22 @@ static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_off
     RenderWeirdGradient(Buffer, GameState->BlueOffset, GameState->GreenOffset);
 }
 
-static void GameGetSoundSamples(game_memory *Memory, game_sound_output_buffer *SoundBuffer)
+extern "C" GAME_GET_SOUND_SAMPLES(GameGetSoundSamples)
 {
     game_state *GameState = (game_state *)Memory->PermanentStorage;
     GameOutputSound(SoundBuffer, GameState->ToneHz);
 }
+
+#if GAME_WIN32
+
+#include "windows.h"
+
+BOOL WINAPI DllMain(
+    _In_ HINSTANCE hinstDLL,
+    _In_ DWORD fdwReason,
+    _In_ LPVOID lpvReserved)
+    {
+        return TRUE;
+    }
+
+    #endif

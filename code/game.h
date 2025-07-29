@@ -1,3 +1,9 @@
+#include <math.h>
+#include <stdint.h>
+#include <windows.h>
+#include <stdio.h>
+#define Pi32 3.14159265359f
+
 #if !defined(GAME_H)
 
 /*
@@ -35,9 +41,14 @@ struct debug_read_file_result
     uint32_t ContentsSize;
     void *Contents;
 };
-static debug_read_file_result DEBUGPlatformReadEntireFile(char *FileName);
-static void DEBUGPlatformFreeFileMemory(void *Memory);
-static bool DEBUGPlatformWriteEntireFile(char *FileName, uint32_t MemorySize, void *Memory);
+#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(char *FileName)
+typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
+
+#define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void *Memory)
+typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
+
+#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool name(char *FileName, uint32_t MemorySize, void *Memory)
+typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
 #endif
 //--------Services that the game provides to the platform layer.
 //Input: Timing, Controller/Keyboard input, Bitmap buffer to use, sound buffer to usestruct win_32_offscreen_buffer 
@@ -119,15 +130,29 @@ struct game_memory
     uint64_t PermanentStorageSize;
     void *PermanentStorage; // MUST be cleared to 0 at startup. Handled by default on win32
     uint64_t TransientStorageSize;
-    void *TransientStorage; // Same requirement as PermanentStorage 
+    void *TransientStorage; // Same requirement as PermanentStorage
+    
+    debug_platform_read_entire_file *DEBUGPlatformReadEntireFile;
+    debug_platform_free_file_memory *DEBUGPlatformFreeFileMemory;
+    debug_platform_write_entire_file *DEBUGPlatformWriteEntireFile;
 };
 
 
-static void GameOutputSound(game_sound_output_buffer *SoundBuffer, int SampleCountToOutput);
-static void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer);
+void GameOutputSound(game_sound_output_buffer *SoundBuffer, int SampleCountToOutput);
+
+#define GAME_UPDATE_AND_RENDER(name) void name(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer)
+typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
+GAME_UPDATE_AND_RENDER(GameUpdateAndRenderStub)
+{
+}
+
 // NOTE: This has to be performant or audio latency will be high
 // Reduce pressure on this function by measuring
-static void GameGetSoundSamples(game_memory *Memory, game_sound_output_buffer *SoundBuffer);
+#define GAME_GET_SOUND_SAMPLES(name) void name(game_memory *Memory, game_sound_output_buffer *SoundBuffer)
+typedef GAME_GET_SOUND_SAMPLES(game_get_sound_samples);
+GAME_GET_SOUND_SAMPLES(GameGetSoundSamplesStub)
+{
+}
 
 #define GAME_H
 #endif

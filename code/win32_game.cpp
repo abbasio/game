@@ -1,16 +1,18 @@
-#include <math.h>
-#include <stdint.h>
+#include "game.h"
+
 #include <windows.h>
 #include <stdio.h>
-#define Pi32 3.14159265359f
-
-#include "game.h"
-#include "game.cpp"
-
+#include <malloc.h>
 #include <xinput.h>
 #include <dsound.h>
 
 #include "win32_game.h"
+
+static bool GlobalRunning;
+static bool GlobalPause;
+static win32_offscreen_buffer GlobalBackBuffer;
+static LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
+static int64_t GlobalPerfCountFrequency;
 
 // Setting up input functions up this way allows us to avoid linking dlls/libraries
 // that might have incompatibilities, while maintaining the same names.
@@ -38,13 +40,15 @@ static x_input_set_state *XInputSetState_ = XInputSetStateStub;
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter);
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
-static bool GlobalRunning;
-static bool GlobalPause;
-static win32_offscreen_buffer GlobalBackBuffer;
-static LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
-static int64_t GlobalPerfCountFrequency;
+DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUGPlatformFreeFileMemory)
+{
+    if(Memory)
+    {
+        VirtualFree(Memory, 0, MEM_RELEASE);
+    }
+}
 
-static debug_read_file_result DEBUGPlatformReadEntireFile(char *FileName)
+DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile)
 {
     debug_read_file_result Result = {};
 
@@ -90,14 +94,7 @@ static debug_read_file_result DEBUGPlatformReadEntireFile(char *FileName)
     return(Result);
 }
 
-static void DEBUGPlatformFreeFileMemory(void *Memory)
-{
-    if(Memory)
-    {
-        VirtualFree(Memory, 0, MEM_RELEASE);
-    }
-}
-static bool DEBUGPlatformWriteEntireFile(char *FileName, uint32_t MemorySize, void *Memory)
+DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile)
 {
     bool Result = false;
 
@@ -121,6 +118,36 @@ static bool DEBUGPlatformWriteEntireFile(char *FileName, uint32_t MemorySize, vo
     }
 
     return(Result);
+}
+
+struct win32_game_code
+{
+    HMODULE GameCodeDLL;
+    game_update_and_render *UpdateAndRender;
+    game_get_sound_samples *GetSoundSamples;
+
+    bool IsValid;
+};
+
+static win32_game_code Win32LoadGameCode(void)
+{
+    win32_game_code Result = {};
+    
+    Result.GameCodeDLL = LoadLibrary("game.exe");
+    if(Result.GameCodeDLL)
+    {
+        Result.UpdateAndRender = (game_update_and_render *)GetProcAddress(Result.GameCodeDLL, "GameUpdateAndRender");
+        Result.GetSoundSamples = (game_get_sound_samples *)GetProcAddress(Result.GameCodeDLL, "GameGetSoundSamples");
+        Result.IsValid = (Result.UpdateAndRender && Result.GetSoundSamples);
+    }
+    
+    if(!Result.IsValid)
+    {
+        Result.UpdateAndRender = GameUpdateAndRenderStub;
+        Result.GetSoundSamples = GameGetSoundSamplesStub;
+    } 
+    
+    return Result;
 }
 
 static void Win32LoadXInput(void)
@@ -609,6 +636,8 @@ int CALLBACK WinMain(
         LPSTR lpCmdLine, 
         int nCmdShow) 
 {
+    win32_game_code Game = Win32LoadGameCode();
+    
     LARGE_INTEGER PerfCountFrequencyResult;
     QueryPerformanceFrequency(&PerfCountFrequencyResult);
     GlobalPerfCountFrequency = PerfCountFrequencyResult.QuadPart;
@@ -696,7 +725,10 @@ int CALLBACK WinMain(
             game_memory GameMemory = {};
             GameMemory.PermanentStorageSize = Megabytes(64);
             GameMemory.TransientStorageSize = Gigabytes((uint64_t)1);
-           
+            GameMemory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
+            GameMemory.DEBUGPlatformReadEntireFile = DEBUGPlatformReadEntireFile;
+            GameMemory.DEBUGPlatformWriteEntireFile = DEBUGPlatformWriteEntireFile;
+
             // TODO: Handle different memory footprints
             uint64_t TotalSize = GameMemory.PermanentStorageSize + GameMemory.TransientStorageSize;
 
@@ -828,7 +860,7 @@ int CALLBACK WinMain(
                     Buffer.Width = GlobalBackBuffer.Width;
                     Buffer.Height = GlobalBackBuffer.Height;
                     Buffer.Pitch = GlobalBackBuffer.Pitch;
-                    GameUpdateAndRender(&GameMemory, NewInput,  &Buffer); 
+                    Game.UpdateAndRender(&GameMemory, NewInput,  &Buffer); 
                     
                     LARGE_INTEGER AudioWallClock = Win32GetWallClock();
                     float FromBeginToAudioSeconds = 1000.0f * Win32GetSecondsElapsed(FlipWallClock, AudioWallClock);
@@ -903,7 +935,7 @@ int CALLBACK WinMain(
                         SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
                         SoundBuffer.SampleCount  = BytesToWrite / SoundOutput.BytesPerSample;
                         SoundBuffer.Samples = Samples; 
-                        GameGetSoundSamples(&GameMemory, &SoundBuffer);
+                        Game.GetSoundSamples(&GameMemory, &SoundBuffer);
 #if GAME_INTERNAL
                         // Audio latency in bytes: 5760 (~33ms)
                         win32_debug_time_marker *Marker = &DebugTimeMarkers[DebugTimeMarkerIndex];
