@@ -133,8 +133,8 @@ static win32_game_code Win32LoadGameCode(void)
 {
     win32_game_code Result = {};
     
-    CopyFile("game.dll", "game_temp.dll", FALSE);
-    Result.GameCodeDLL = LoadLibrary("game_temp.dll");
+    CopyFileA("game.dll", "game_temp.dll", FALSE);
+    Result.GameCodeDLL = LoadLibraryA("game_temp.dll");
     if(Result.GameCodeDLL)
     {
         Result.UpdateAndRender = (game_update_and_render *)GetProcAddress(Result.GameCodeDLL, "GameUpdateAndRender");
